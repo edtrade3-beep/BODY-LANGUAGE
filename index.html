@@ -9,34 +9,39 @@
   <style>
     body{margin:0;background:#08111f;color:white;font-family:Arial,sans-serif}
     header{padding:18px;background:#0d1729;border-bottom:1px solid #22314a}
-    h1{font-size:22px;margin:0}
-    .sub{color:#9fb0c7;font-size:13px;margin-top:4px}
+    h1{font-size:22px;margin:0}.sub{color:#9fb0c7;font-size:13px;margin-top:4px}
     main{padding:16px;max-width:980px;margin:auto}
     video{width:100%;background:#000;border-radius:16px;border:1px solid #263a5c}
-    button{padding:12px 15px;margin:6px 4px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:bold}
-    button.green{background:#16a34a}
-    button.red{background:#dc2626}
+    button,select{padding:12px 15px;margin:6px 4px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:bold}
+    select{background:#111c31;border:1px solid #263a5c}
+    button.green{background:#16a34a} button.red{background:#dc2626} button.gray{background:#334155}
     .card{background:#111c31;border:1px solid #263a5c;border-radius:16px;padding:16px;margin-top:14px}
     .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
     .metric{background:#0b1220;border:1px solid #263a5c;border-radius:14px;padding:14px}
-    .label{color:#9fb0c7;font-size:12px}
-    .value{font-size:28px;font-weight:900;margin-top:6px}
+    .label{color:#9fb0c7;font-size:12px}.value{font-size:28px;font-weight:900;margin-top:6px}
     .good{color:#22c55e}.warn{color:#facc15}.bad{color:#ef4444}
-    .report{line-height:1.5;color:#dbeafe}
-    .notice{font-size:12px;color:#9fb0c7;line-height:1.4}
+    .report{line-height:1.5;color:#dbeafe}.notice{font-size:12px;color:#9fb0c7;line-height:1.4}
     @media(max-width:650px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <header>
   <h1>HumanLens AI</h1>
-  <div class="sub">Installable body-language coaching app — camera + video analysis</div>
+  <div class="sub">Installable app with front/back camera switch + behavior coaching report</div>
 </header>
 
 <main>
   <video id="video" autoplay playsinline muted controls></video>
-  <div>
-    <button class="green" onclick="startCamera()">Start Camera</button>
+
+  <div class="card">
+    <select id="cameraSelect" onchange="startSelectedCamera()">
+      <option value="">Camera list loading...</option>
+    </select>
+    <br>
+    <button class="green" onclick="startCamera('user')">Front Camera</button>
+    <button class="green" onclick="startCamera('environment')">Back Camera</button>
+    <button class="gray" onclick="switchCamera()">Switch Camera</button>
+    <button onclick="refreshCameras()">Refresh Cameras</button>
     <button onclick="analyze()">Analyze</button>
     <button onclick="autoAnalyze()">Auto Scan</button>
     <button class="red" onclick="stopAll()">Stop</button>
@@ -53,43 +58,124 @@
 
   <div class="card">
     <h2>AI Report</h2>
-    <div id="report" class="report">Start camera, then click Analyze.</div>
+    <div id="report" class="report">Choose Front Camera or Back Camera, then click Analyze.</div>
   </div>
 
   <div class="card notice">
+    Camera switching works best on HTTPS after deploying to Vercel/Netlify. On iPhone/Android, use “Add to Home Screen” after opening the live HTTPS URL.
     This app gives behavior/coaching signals only. It does not prove lies, guilt, intent, attraction, medical status, or mental health.
   </div>
 </main>
 
 <script>
 let stream=null, timer=null;
+let currentFacingMode="user";
+let currentDeviceId=null;
 const video=document.getElementById("video");
+const cameraSelect=document.getElementById("cameraSelect");
 
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("service-worker.js");
 }
 
-async function startCamera(){
+async function stopStreamOnly(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream=null;
+  }
+}
+
+async function startCamera(facingMode="user"){
+  currentFacingMode=facingMode;
+  currentDeviceId=null;
+  await stopStreamOnly();
+
+  const constraints={
+    audio:false,
+    video:{
+      facingMode:{ideal:facingMode},
+      width:{ideal:1280},
+      height:{ideal:720}
+    }
+  };
+
   try{
-    stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    stream=await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject=stream;
+    await video.play();
+    await refreshCameras(false);
+    document.getElementById("report").innerText =
+      (facingMode==="environment" ? "Back camera active." : "Front camera active.") + "\nClick Analyze or Auto Scan.";
   }catch(e){
-    alert("Camera blocked. On mobile, install/open from HTTPS or allow camera permission.");
+    alert("Camera failed. Make sure the app is opened on HTTPS and camera permission is allowed.");
+  }
+}
+
+async function startSelectedCamera(){
+  const deviceId=cameraSelect.value;
+  if(!deviceId) return;
+  currentDeviceId=deviceId;
+  await stopStreamOnly();
+
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}
+    });
+    video.srcObject=stream;
+    await video.play();
+    document.getElementById("report").innerText="Selected camera active. Click Analyze or Auto Scan.";
+  }catch(e){
+    alert("Could not open selected camera.");
+  }
+}
+
+async function switchCamera(){
+  const next = currentFacingMode === "user" ? "environment" : "user";
+  await startCamera(next);
+}
+
+async function refreshCameras(requestPermission=true){
+  try{
+    if(requestPermission && !stream){
+      const temp=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      temp.getTracks().forEach(t=>t.stop());
+    }
+
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const cams=devices.filter(d=>d.kind==="videoinput");
+
+    cameraSelect.innerHTML="";
+    if(cams.length===0){
+      cameraSelect.innerHTML='<option value="">No cameras found</option>';
+      return;
+    }
+
+    cams.forEach((cam,i)=>{
+      const opt=document.createElement("option");
+      opt.value=cam.deviceId;
+      opt.textContent=cam.label || `Camera ${i+1}`;
+      cameraSelect.appendChild(opt);
+    });
+  }catch(e){
+    cameraSelect.innerHTML='<option value="">Allow camera first</option>';
   }
 }
 
 function stopAll(){
   if(timer){clearInterval(timer);timer=null;}
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  stopStreamOnly();
 }
 
 function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
-
-function scoreClass(v){
-  return v>=70 ? "value good" : v>=45 ? "value warn" : "value bad";
-}
+function scoreClass(v){return v>=70 ? "value good" : v>=45 ? "value warn" : "value bad";}
 
 function analyze(){
+  if(!stream){
+    document.getElementById("report").innerText="Start front or back camera first.";
+    return;
+  }
+
   const confidence=rand(55,94);
   const stress=rand(12,78);
   const engagement=rand(45,96);
@@ -116,7 +202,8 @@ function analyze(){
   report.push("Coaching:");
   report.push("• Relax shoulders.");
   report.push("• Keep camera at eye level.");
-  report.push("• Reduce sudden movement.");
+  report.push("• Use front camera for self-coaching.");
+  report.push("• Use back camera when observing a room/person with consent.");
   report.push("• Use this for observation only, not judgment.");
 
   document.getElementById("report").innerText=report.join("\n");
@@ -127,6 +214,8 @@ function autoAnalyze(){
   analyze();
   timer=setInterval(analyze,2000);
 }
+
+refreshCameras(false);
 </script>
 </body>
 </html>

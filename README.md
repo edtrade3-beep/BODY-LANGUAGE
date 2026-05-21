@@ -1,15 +1,11 @@
-# HumanLens AI App
+# HumanLens AI Camera App
 
-This is an installable PWA app, not a Chrome extension.
+Installable PWA app with:
+- Front camera
+- Back camera
+- Switch camera button
+- Camera dropdown
+- Auto scan
+- Behavior report
 
-## Run locally
-Open `index.html` in Chrome.
-
-## Install as app
-Best method:
-1. Upload this folder to GitHub
-2. Deploy to Vercel/Netlify
-3. Open the live URL on phone or computer
-4. Click Install / Add to Home Screen
-
-Camera works best on HTTPS.
+Deploy to Vercel/Netlify for HTTPS. Mobile camera access works best on HTTPS.
