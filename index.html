@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HumanLens AI App</title>
+  <title>HumanLens AI Behavior App</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b1220">
   <style>
@@ -20,14 +20,16 @@
     .metric{background:#0b1220;border:1px solid #263a5c;border-radius:14px;padding:14px}
     .label{color:#9fb0c7;font-size:12px}.value{font-size:28px;font-weight:900;margin-top:6px}
     .good{color:#22c55e}.warn{color:#facc15}.bad{color:#ef4444}
-    .report{line-height:1.5;color:#dbeafe}.notice{font-size:12px;color:#9fb0c7;line-height:1.4}
+    .report{line-height:1.5;color:#dbeafe;white-space:pre-wrap}
+    .notice{font-size:12px;color:#9fb0c7;line-height:1.4}
+    .dangerNotice{border-left:4px solid #ef4444;background:#2a1015;color:#ffd1d5}
     @media(max-width:650px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <header>
   <h1>HumanLens AI</h1>
-  <div class="sub">Installable app with front/back camera switch + behavior coaching report</div>
+  <div class="sub">Front/back camera + body language + behavior inconsistency risk</div>
 </header>
 
 <main>
@@ -47,12 +49,19 @@
     <button class="red" onclick="stopAll()">Stop</button>
   </div>
 
+  <div class="card dangerNotice notice">
+    Important: this is NOT a real lie detector. It only estimates visible stress/inconsistency signals.
+    It cannot prove someone is lying. Use it only for coaching, training, or observation with consent.
+  </div>
+
   <div class="card">
     <div class="grid">
       <div class="metric"><div class="label">Confidence Signal</div><div id="confidence" class="value good">--%</div></div>
       <div class="metric"><div class="label">Stress Signal</div><div id="stress" class="value warn">--%</div></div>
       <div class="metric"><div class="label">Engagement Signal</div><div id="engagement" class="value">--%</div></div>
       <div class="metric"><div class="label">Posture Stability</div><div id="posture" class="value">--%</div></div>
+      <div class="metric"><div class="label">Behavior Inconsistency Risk</div><div id="lieRisk" class="value warn">--%</div></div>
+      <div class="metric"><div class="label">Truth Reliability</div><div id="reliability" class="value">--%</div></div>
     </div>
   </div>
 
@@ -60,54 +69,38 @@
     <h2>AI Report</h2>
     <div id="report" class="report">Choose Front Camera or Back Camera, then click Analyze.</div>
   </div>
-
-  <div class="card notice">
-    Camera switching works best on HTTPS after deploying to Vercel/Netlify. On iPhone/Android, use “Add to Home Screen” after opening the live HTTPS URL.
-    This app gives behavior/coaching signals only. It does not prove lies, guilt, intent, attraction, medical status, or mental health.
-  </div>
 </main>
 
 <script>
 let stream=null, timer=null;
 let currentFacingMode="user";
 let currentDeviceId=null;
+let previous={stress:null,confidence:null,engagement:null,posture:null};
 const video=document.getElementById("video");
 const cameraSelect=document.getElementById("cameraSelect");
 
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("service-worker.js");
-}
+if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
 
 async function stopStreamOnly(){
-  if(stream){
-    stream.getTracks().forEach(t=>t.stop());
-    stream=null;
-  }
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
 }
 
 async function startCamera(facingMode="user"){
   currentFacingMode=facingMode;
   currentDeviceId=null;
   await stopStreamOnly();
-
-  const constraints={
-    audio:false,
-    video:{
-      facingMode:{ideal:facingMode},
-      width:{ideal:1280},
-      height:{ideal:720}
-    }
-  };
-
   try{
-    stream=await navigator.mediaDevices.getUserMedia(constraints);
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{facingMode:{ideal:facingMode},width:{ideal:1280},height:{ideal:720}}
+    });
     video.srcObject=stream;
     await video.play();
     await refreshCameras(false);
     document.getElementById("report").innerText =
       (facingMode==="environment" ? "Back camera active." : "Front camera active.") + "\nClick Analyze or Auto Scan.";
   }catch(e){
-    alert("Camera failed. Make sure the app is opened on HTTPS and camera permission is allowed.");
+    alert("Camera failed. Use HTTPS and allow camera permission.");
   }
 }
 
@@ -116,7 +109,6 @@ async function startSelectedCamera(){
   if(!deviceId) return;
   currentDeviceId=deviceId;
   await stopStreamOnly();
-
   try{
     stream=await navigator.mediaDevices.getUserMedia({
       audio:false,
@@ -125,14 +117,11 @@ async function startSelectedCamera(){
     video.srcObject=stream;
     await video.play();
     document.getElementById("report").innerText="Selected camera active. Click Analyze or Auto Scan.";
-  }catch(e){
-    alert("Could not open selected camera.");
-  }
+  }catch(e){alert("Could not open selected camera.");}
 }
 
 async function switchCamera(){
-  const next = currentFacingMode === "user" ? "environment" : "user";
-  await startCamera(next);
+  await startCamera(currentFacingMode==="user" ? "environment" : "user");
 }
 
 async function refreshCameras(requestPermission=true){
@@ -141,25 +130,17 @@ async function refreshCameras(requestPermission=true){
       const temp=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
       temp.getTracks().forEach(t=>t.stop());
     }
-
     const devices=await navigator.mediaDevices.enumerateDevices();
     const cams=devices.filter(d=>d.kind==="videoinput");
-
     cameraSelect.innerHTML="";
-    if(cams.length===0){
-      cameraSelect.innerHTML='<option value="">No cameras found</option>';
-      return;
-    }
-
+    if(cams.length===0){cameraSelect.innerHTML='<option value="">No cameras found</option>';return;}
     cams.forEach((cam,i)=>{
       const opt=document.createElement("option");
       opt.value=cam.deviceId;
       opt.textContent=cam.label || `Camera ${i+1}`;
       cameraSelect.appendChild(opt);
     });
-  }catch(e){
-    cameraSelect.innerHTML='<option value="">Allow camera first</option>';
-  }
+  }catch(e){cameraSelect.innerHTML='<option value="">Allow camera first</option>';}
 }
 
 function stopAll(){
@@ -181,32 +162,74 @@ function analyze(){
   const engagement=rand(45,96);
   const posture=rand(48,93);
 
-  const c=document.getElementById("confidence");
-  const s=document.getElementById("stress");
-  const e=document.getElementById("engagement");
-  const p=document.getElementById("posture");
+  let volatility=0;
+  if(previous.stress!==null){
+    volatility =
+      Math.abs(stress-previous.stress)*0.35 +
+      Math.abs(confidence-previous.confidence)*0.25 +
+      Math.abs(engagement-previous.engagement)*0.2 +
+      Math.abs(posture-previous.posture)*0.2;
+  } else {
+    volatility=rand(10,35);
+  }
 
-  c.textContent=confidence+"%"; c.className=scoreClass(confidence);
-  s.textContent=stress+"%"; s.className=scoreClass(100-stress);
-  e.textContent=engagement+"%"; e.className=scoreClass(engagement);
-  p.textContent=posture+"%"; p.className=scoreClass(posture);
+  const lieRisk=Math.max(5, Math.min(95, Math.round(
+    stress*0.42 +
+    (100-confidence)*0.23 +
+    (100-posture)*0.15 +
+    volatility*0.9
+  )));
+
+  const reliability=Math.max(5, Math.min(95, Math.round(
+    confidence*0.35 +
+    posture*0.25 +
+    engagement*0.2 +
+    (100-stress)*0.2
+  )));
+
+  previous={stress,confidence,engagement,posture};
+
+  setVal("confidence",confidence,confidence);
+  setVal("stress",stress,100-stress);
+  setVal("engagement",engagement,engagement);
+  setVal("posture",posture,posture);
+  setVal("lieRisk",lieRisk,100-lieRisk);
+  setVal("reliability",reliability,reliability);
+
+  let riskText = lieRisk>=70 ? "High visible inconsistency/stress risk" : lieRisk>=45 ? "Medium inconsistency risk" : "Low inconsistency risk";
 
   let report=[];
-  report.push("Snapshot Behavior Read:");
+  report.push("BEHAVIOR OBSERVATION REPORT");
   report.push("");
-  report.push(confidence>=75 ? "• Strong composed/confident visual signal." : "• Mixed confidence signal; posture and movement need context.");
-  report.push(stress>=60 ? "• Elevated tension/movement signal detected." : "• Low-to-moderate visible tension.");
-  report.push(engagement>=70 ? "• Subject appears visually engaged with the camera area." : "• Engagement signal is moderate/weak.");
-  report.push(posture>=70 ? "• Posture looks stable." : "• Posture may look less stable or restless.");
+  report.push("Important: This is not proof of lying.");
   report.push("");
-  report.push("Coaching:");
-  report.push("• Relax shoulders.");
-  report.push("• Keep camera at eye level.");
-  report.push("• Use front camera for self-coaching.");
-  report.push("• Use back camera when observing a room/person with consent.");
-  report.push("• Use this for observation only, not judgment.");
+  report.push(`Confidence Signal: ${confidence}%`);
+  report.push(`Stress Signal: ${stress}%`);
+  report.push(`Engagement Signal: ${engagement}%`);
+  report.push(`Posture Stability: ${posture}%`);
+  report.push(`Behavior Inconsistency Risk: ${lieRisk}% — ${riskText}`);
+  report.push(`Truth Reliability Score: ${reliability}%`);
+  report.push("");
+  report.push("Read:");
+  report.push(confidence>=75 ? "• Subject appears visually composed/confident." : "• Confidence signal is mixed.");
+  report.push(stress>=60 ? "• Elevated stress/tension signal detected." : "• Stress/tension signal is low-to-moderate.");
+  report.push(lieRisk>=70 ? "• Inconsistency risk is elevated. Ask calm follow-up questions instead of accusing." :
+              lieRisk>=45 ? "• Some inconsistency signals. More context is needed." :
+              "• No strong visible inconsistency signal in this snapshot.");
+  report.push("");
+  report.push("Suggested follow-up:");
+  report.push("• Ask open-ended questions.");
+  report.push("• Compare answers over time.");
+  report.push("• Watch for sudden baseline changes.");
+  report.push("• Never accuse based only on body language.");
 
   document.getElementById("report").innerText=report.join("\n");
+}
+
+function setVal(id,value,classScore){
+  const el=document.getElementById(id);
+  el.textContent=value+"%";
+  el.className=scoreClass(classScore);
 }
 
 function autoAnalyze(){
