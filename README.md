@@ -1,14 +1,15 @@
-# HumanLens AI — Body Language Analyzer
+# HumanLens AI App
 
-Open `humanlens_body_language_analyzer.html` in Chrome.
+This is an installable PWA app, not a Chrome extension.
 
-Features:
-- Camera input
-- Video upload
-- Snapshot analysis
-- Auto analysis
-- Confidence / stress / engagement / posture dashboard
-- Downloadable report
+## Run locally
+Open `index.html` in Chrome.
 
-Important:
-This is a coaching/observation MVP. It does not prove lies, intent, attraction, guilt, or mental health.
+## Install as app
+Best method:
+1. Upload this folder to GitHub
+2. Deploy to Vercel/Netlify
+3. Open the live URL on phone or computer
+4. Click Install / Add to Home Screen
+
+Camera works best on HTTPS.

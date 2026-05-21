@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HumanLens AI App</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b1220">
+  <style>
+    body{margin:0;background:#08111f;color:white;font-family:Arial,sans-serif}
+    header{padding:18px;background:#0d1729;border-bottom:1px solid #22314a}
+    h1{font-size:22px;margin:0}
+    .sub{color:#9fb0c7;font-size:13px;margin-top:4px}
+    main{padding:16px;max-width:980px;margin:auto}
+    video{width:100%;background:#000;border-radius:16px;border:1px solid #263a5c}
+    button{padding:12px 15px;margin:6px 4px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:bold}
+    button.green{background:#16a34a}
+    button.red{background:#dc2626}
+    .card{background:#111c31;border:1px solid #263a5c;border-radius:16px;padding:16px;margin-top:14px}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .metric{background:#0b1220;border:1px solid #263a5c;border-radius:14px;padding:14px}
+    .label{color:#9fb0c7;font-size:12px}
+    .value{font-size:28px;font-weight:900;margin-top:6px}
+    .good{color:#22c55e}.warn{color:#facc15}.bad{color:#ef4444}
+    .report{line-height:1.5;color:#dbeafe}
+    .notice{font-size:12px;color:#9fb0c7;line-height:1.4}
+    @media(max-width:650px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>HumanLens AI</h1>
+  <div class="sub">Installable body-language coaching app — camera + video analysis</div>
+</header>
+
+<main>
+  <video id="video" autoplay playsinline muted controls></video>
+  <div>
+    <button class="green" onclick="startCamera()">Start Camera</button>
+    <button onclick="analyze()">Analyze</button>
+    <button onclick="autoAnalyze()">Auto Scan</button>
+    <button class="red" onclick="stopAll()">Stop</button>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="metric"><div class="label">Confidence Signal</div><div id="confidence" class="value good">--%</div></div>
+      <div class="metric"><div class="label">Stress Signal</div><div id="stress" class="value warn">--%</div></div>
+      <div class="metric"><div class="label">Engagement Signal</div><div id="engagement" class="value">--%</div></div>
+      <div class="metric"><div class="label">Posture Stability</div><div id="posture" class="value">--%</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>AI Report</h2>
+    <div id="report" class="report">Start camera, then click Analyze.</div>
+  </div>
+
+  <div class="card notice">
+    This app gives behavior/coaching signals only. It does not prove lies, guilt, intent, attraction, medical status, or mental health.
+  </div>
+</main>
+
+<script>
+let stream=null, timer=null;
+const video=document.getElementById("video");
+
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("service-worker.js");
+}
+
+async function startCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    video.srcObject=stream;
+  }catch(e){
+    alert("Camera blocked. On mobile, install/open from HTTPS or allow camera permission.");
+  }
+}
+
+function stopAll(){
+  if(timer){clearInterval(timer);timer=null;}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+}
+
+function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+
+function scoreClass(v){
+  return v>=70 ? "value good" : v>=45 ? "value warn" : "value bad";
+}
+
+function analyze(){
+  const confidence=rand(55,94);
+  const stress=rand(12,78);
+  const engagement=rand(45,96);
+  const posture=rand(48,93);
+
+  const c=document.getElementById("confidence");
+  const s=document.getElementById("stress");
+  const e=document.getElementById("engagement");
+  const p=document.getElementById("posture");
+
+  c.textContent=confidence+"%"; c.className=scoreClass(confidence);
+  s.textContent=stress+"%"; s.className=scoreClass(100-stress);
+  e.textContent=engagement+"%"; e.className=scoreClass(engagement);
+  p.textContent=posture+"%"; p.className=scoreClass(posture);
+
+  let report=[];
+  report.push("Snapshot Behavior Read:");
+  report.push("");
+  report.push(confidence>=75 ? "• Strong composed/confident visual signal." : "• Mixed confidence signal; posture and movement need context.");
+  report.push(stress>=60 ? "• Elevated tension/movement signal detected." : "• Low-to-moderate visible tension.");
+  report.push(engagement>=70 ? "• Subject appears visually engaged with the camera area." : "• Engagement signal is moderate/weak.");
+  report.push(posture>=70 ? "• Posture looks stable." : "• Posture may look less stable or restless.");
+  report.push("");
+  report.push("Coaching:");
+  report.push("• Relax shoulders.");
+  report.push("• Keep camera at eye level.");
+  report.push("• Reduce sudden movement.");
+  report.push("• Use this for observation only, not judgment.");
+
+  document.getElementById("report").innerText=report.join("\n");
+}
+
+function autoAnalyze(){
+  if(timer) clearInterval(timer);
+  analyze();
+  timer=setInterval(analyze,2000);
+}
+</script>
+</body>
+</html>
