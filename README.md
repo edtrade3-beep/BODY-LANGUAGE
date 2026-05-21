@@ -1,13 +1,16 @@
-# HumanLens AI Behavior App
+# HumanLens AI Social Video App
 
 Installable PWA app with:
-- Front camera
-- Back camera
-- Switch camera
-- Behavior scoring
+- Front/back camera
+- Camera switching
+- Uploaded social media video review
+- Optional social media URL note field
+- Optional transcript/caption consistency checker
 - Behavior Inconsistency Risk
-- Truth Reliability Score
+- Statement Consistency Score
+- Downloadable report
 
 Important:
-This is not a real lie detector and cannot prove deception. It only estimates visible stress/inconsistency signals for coaching and observation.
+This is not a lie detector and cannot prove deception. It estimates visible behavior/stress and wording inconsistency signals only.
+Direct TikTok/Instagram/Facebook/YouTube links are usually blocked in browser apps. Download/save the video first, then upload it.
 Deploy to Vercel/Netlify for HTTPS camera access.

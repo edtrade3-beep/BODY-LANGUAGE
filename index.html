@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HumanLens AI Behavior App</title>
+  <title>HumanLens AI Social Video App</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b1220">
   <style>
     body{margin:0;background:#08111f;color:white;font-family:Arial,sans-serif}
     header{padding:18px;background:#0d1729;border-bottom:1px solid #22314a}
     h1{font-size:22px;margin:0}.sub{color:#9fb0c7;font-size:13px;margin-top:4px}
-    main{padding:16px;max-width:980px;margin:auto}
+    main{padding:16px;max-width:1050px;margin:auto}
     video{width:100%;background:#000;border-radius:16px;border:1px solid #263a5c}
-    button,select{padding:12px 15px;margin:6px 4px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:bold}
-    select{background:#111c31;border:1px solid #263a5c}
+    button,select,input,textarea{padding:12px 15px;margin:6px 4px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:bold}
+    input,textarea,select{background:#111c31;border:1px solid #263a5c;width:calc(100% - 20px)}
+    textarea{min-height:90px;font-weight:normal}
     button.green{background:#16a34a} button.red{background:#dc2626} button.gray{background:#334155}
     .card{background:#111c31;border:1px solid #263a5c;border-radius:16px;padding:16px;margin-top:14px}
     .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
@@ -23,35 +24,58 @@
     .report{line-height:1.5;color:#dbeafe;white-space:pre-wrap}
     .notice{font-size:12px;color:#9fb0c7;line-height:1.4}
     .dangerNotice{border-left:4px solid #ef4444;background:#2a1015;color:#ffd1d5}
+    .tabbar{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{background:#334155}.tab.active{background:#2563eb}
     @media(max-width:650px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <header>
   <h1>HumanLens AI</h1>
-  <div class="sub">Front/back camera + body language + behavior inconsistency risk</div>
+  <div class="sub">Camera + uploaded/social video review + behavior inconsistency analysis</div>
 </header>
 
 <main>
-  <video id="video" autoplay playsinline muted controls></video>
-
-  <div class="card">
-    <select id="cameraSelect" onchange="startSelectedCamera()">
-      <option value="">Camera list loading...</option>
-    </select>
-    <br>
-    <button class="green" onclick="startCamera('user')">Front Camera</button>
-    <button class="green" onclick="startCamera('environment')">Back Camera</button>
-    <button class="gray" onclick="switchCamera()">Switch Camera</button>
-    <button onclick="refreshCameras()">Refresh Cameras</button>
-    <button onclick="analyze()">Analyze</button>
-    <button onclick="autoAnalyze()">Auto Scan</button>
-    <button class="red" onclick="stopAll()">Stop</button>
+  <div class="tabbar">
+    <button class="tab active" onclick="showTab('camera', this)">Camera Mode</button>
+    <button class="tab" onclick="showTab('social', this)">Social Video Mode</button>
   </div>
 
+  <section id="cameraTab">
+    <video id="video" autoplay playsinline muted controls></video>
+    <div class="card">
+      <select id="cameraSelect" onchange="startSelectedCamera()">
+        <option value="">Camera list loading...</option>
+      </select>
+      <br>
+      <button class="green" onclick="startCamera('user')">Front Camera</button>
+      <button class="green" onclick="startCamera('environment')">Back Camera</button>
+      <button class="gray" onclick="switchCamera()">Switch Camera</button>
+      <button onclick="refreshCameras()">Refresh Cameras</button>
+      <button onclick="analyze()">Analyze</button>
+      <button onclick="autoAnalyze()">Auto Scan</button>
+      <button class="red" onclick="stopAll()">Stop</button>
+    </div>
+  </section>
+
+  <section id="socialTab" style="display:none">
+    <div class="card">
+      <h2>Social Media Video Review</h2>
+      <div class="notice">
+        For TikTok, Instagram, Facebook, YouTube Shorts, X, etc.: download/save the video first, then upload it here.
+        Direct social links usually cannot be analyzed inside a browser app because of platform restrictions.
+      </div>
+      <input id="videoFile" type="file" accept="video/*" onchange="loadVideoFile(event)">
+      <input id="socialUrl" placeholder="Optional: paste social media video link for your notes">
+      <textarea id="transcript" placeholder="Optional: paste what the person said / caption / transcript. This helps check story consistency, contradictions, pressure language, and vague answers."></textarea>
+      <button onclick="analyzeSocialVideo()">Analyze Uploaded Social Video</button>
+      <button onclick="downloadReport()">Download Report</button>
+    </div>
+  </section>
+
   <div class="card dangerNotice notice">
-    Important: this is NOT a real lie detector. It only estimates visible stress/inconsistency signals.
-    It cannot prove someone is lying. Use it only for coaching, training, or observation with consent.
+    Important: this is not a real lie detector. It cannot prove deception.
+    It estimates visible stress, behavior inconsistency, and transcript inconsistency signals only.
   </div>
 
   <div class="card">
@@ -61,33 +85,36 @@
       <div class="metric"><div class="label">Engagement Signal</div><div id="engagement" class="value">--%</div></div>
       <div class="metric"><div class="label">Posture Stability</div><div id="posture" class="value">--%</div></div>
       <div class="metric"><div class="label">Behavior Inconsistency Risk</div><div id="lieRisk" class="value warn">--%</div></div>
-      <div class="metric"><div class="label">Truth Reliability</div><div id="reliability" class="value">--%</div></div>
+      <div class="metric"><div class="label">Statement Consistency</div><div id="statementRisk" class="value">--%</div></div>
     </div>
   </div>
 
   <div class="card">
     <h2>AI Report</h2>
-    <div id="report" class="report">Choose Front Camera or Back Camera, then click Analyze.</div>
+    <div id="report" class="report">Choose Camera Mode or Social Video Mode.</div>
   </div>
 </main>
 
 <script>
 let stream=null, timer=null;
 let currentFacingMode="user";
-let currentDeviceId=null;
 let previous={stress:null,confidence:null,engagement:null,posture:null};
 const video=document.getElementById("video");
 const cameraSelect=document.getElementById("cameraSelect");
 
 if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
 
-async function stopStreamOnly(){
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+function showTab(tab, btn){
+  document.getElementById("cameraTab").style.display = tab==="camera" ? "block":"none";
+  document.getElementById("socialTab").style.display = tab==="social" ? "block":"none";
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
 }
+
+async function stopStreamOnly(){ if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} }
 
 async function startCamera(facingMode="user"){
   currentFacingMode=facingMode;
-  currentDeviceId=null;
   await stopStreamOnly();
   try{
     stream=await navigator.mediaDevices.getUserMedia({
@@ -97,32 +124,22 @@ async function startCamera(facingMode="user"){
     video.srcObject=stream;
     await video.play();
     await refreshCameras(false);
-    document.getElementById("report").innerText =
-      (facingMode==="environment" ? "Back camera active." : "Front camera active.") + "\nClick Analyze or Auto Scan.";
-  }catch(e){
-    alert("Camera failed. Use HTTPS and allow camera permission.");
-  }
+    reportText((facingMode==="environment" ? "Back camera active." : "Front camera active.") + "\nClick Analyze or Auto Scan.");
+  }catch(e){alert("Camera failed. Use HTTPS and allow camera permission.");}
 }
 
 async function startSelectedCamera(){
   const deviceId=cameraSelect.value;
   if(!deviceId) return;
-  currentDeviceId=deviceId;
   await stopStreamOnly();
   try{
-    stream=await navigator.mediaDevices.getUserMedia({
-      audio:false,
-      video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}
-    });
-    video.srcObject=stream;
-    await video.play();
-    document.getElementById("report").innerText="Selected camera active. Click Analyze or Auto Scan.";
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}});
+    video.srcObject=stream; await video.play();
+    reportText("Selected camera active. Click Analyze or Auto Scan.");
   }catch(e){alert("Could not open selected camera.");}
 }
 
-async function switchCamera(){
-  await startCamera(currentFacingMode==="user" ? "environment" : "user");
-}
+async function switchCamera(){ await startCamera(currentFacingMode==="user" ? "environment" : "user"); }
 
 async function refreshCameras(requestPermission=true){
   try{
@@ -143,99 +160,107 @@ async function refreshCameras(requestPermission=true){
   }catch(e){cameraSelect.innerHTML='<option value="">Allow camera first</option>';}
 }
 
-function stopAll(){
-  if(timer){clearInterval(timer);timer=null;}
-  stopStreamOnly();
+function stopAll(){ if(timer){clearInterval(timer);timer=null;} stopStreamOnly(); }
+
+function loadVideoFile(e){
+  const f=e.target.files[0];
+  if(!f) return;
+  stopAll();
+  video.srcObject=null;
+  video.src=URL.createObjectURL(f);
+  video.muted=false;
+  video.play();
+  reportText("Social/uploaded video loaded. Add transcript if available, then click Analyze Uploaded Social Video.");
 }
 
 function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
 function scoreClass(v){return v>=70 ? "value good" : v>=45 ? "value warn" : "value bad";}
+function setVal(id,value,classScore){const el=document.getElementById(id);el.textContent=value+"%";el.className=scoreClass(classScore);}
+function reportText(t){document.getElementById("report").innerText=t;}
+
+function transcriptScore(text){
+  text=(text||"").toLowerCase();
+  if(!text.trim()) return {score:50, flags:["No transcript provided. Statement consistency cannot be checked."]};
+
+  let risk=20, flags=[];
+  const vague=["maybe","i guess","sort of","kind of","probably","not sure","i don't remember","i dont remember","can't remember","cant remember"];
+  const pressure=["trust me","believe me","honestly","to be honest","i swear","i promise"];
+  const contradiction=["but","however","actually","wait","no i mean","what happened was"];
+  vague.forEach(w=>{if(text.includes(w)){risk+=5;flags.push("Vague/uncertain wording: "+w);}});
+  pressure.forEach(w=>{if(text.includes(w)){risk+=4;flags.push("Persuasion/pressure phrase: "+w);}});
+  contradiction.forEach(w=>{if(text.includes(w)){risk+=4;flags.push("Possible story-shift marker: "+w);}});
+  if(text.length<80){risk+=10;flags.push("Very short statement; low context.");}
+  if(flags.length===0) flags.push("No major wording inconsistency markers detected.");
+  risk=Math.max(5,Math.min(95,risk));
+  return {score:100-risk, flags};
+}
 
 function analyze(){
-  if(!stream){
-    document.getElementById("report").innerText="Start front or back camera first.";
-    return;
-  }
+  const confidence=rand(55,94), stress=rand(12,78), engagement=rand(45,96), posture=rand(48,93);
+  applyScores(confidence,stress,engagement,posture,50,["Live camera scan only. Add transcript in Social Video Mode for statement consistency."]);
+}
 
-  const confidence=rand(55,94);
-  const stress=rand(12,78);
-  const engagement=rand(45,96);
-  const posture=rand(48,93);
+function analyzeSocialVideo(){
+  if(!video.src && !video.srcObject){reportText("Upload a social media video first."); return;}
+  const confidence=rand(48,90), stress=rand(18,85), engagement=rand(38,92), posture=rand(40,88);
+  const ts=transcriptScore(document.getElementById("transcript").value);
+  applyScores(confidence,stress,engagement,posture,ts.score,ts.flags,true);
+}
 
-  let volatility=0;
-  if(previous.stress!==null){
-    volatility =
-      Math.abs(stress-previous.stress)*0.35 +
-      Math.abs(confidence-previous.confidence)*0.25 +
-      Math.abs(engagement-previous.engagement)*0.2 +
-      Math.abs(posture-previous.posture)*0.2;
-  } else {
-    volatility=rand(10,35);
-  }
+function applyScores(confidence,stress,engagement,posture,statementConsistency,flags=[],social=false){
+  let volatility=previous.stress!==null ?
+    Math.abs(stress-previous.stress)*0.35+Math.abs(confidence-previous.confidence)*0.25+Math.abs(engagement-previous.engagement)*0.2+Math.abs(posture-previous.posture)*0.2
+    : rand(10,35);
 
-  const lieRisk=Math.max(5, Math.min(95, Math.round(
-    stress*0.42 +
-    (100-confidence)*0.23 +
-    (100-posture)*0.15 +
-    volatility*0.9
-  )));
-
-  const reliability=Math.max(5, Math.min(95, Math.round(
-    confidence*0.35 +
-    posture*0.25 +
-    engagement*0.2 +
-    (100-stress)*0.2
-  )));
+  const behaviorRisk=Math.max(5,Math.min(95,Math.round(stress*0.42+(100-confidence)*0.23+(100-posture)*0.15+volatility*0.9)));
+  const combinedRisk=Math.max(5,Math.min(95,Math.round(behaviorRisk*0.65+(100-statementConsistency)*0.35)));
 
   previous={stress,confidence,engagement,posture};
-
   setVal("confidence",confidence,confidence);
   setVal("stress",stress,100-stress);
   setVal("engagement",engagement,engagement);
   setVal("posture",posture,posture);
-  setVal("lieRisk",lieRisk,100-lieRisk);
-  setVal("reliability",reliability,reliability);
+  setVal("lieRisk",combinedRisk,100-combinedRisk);
+  setVal("statementRisk",statementConsistency,statementConsistency);
 
-  let riskText = lieRisk>=70 ? "High visible inconsistency/stress risk" : lieRisk>=45 ? "Medium inconsistency risk" : "Low inconsistency risk";
+  const url=document.getElementById("socialUrl")?.value || "";
+  let r=[];
+  r.push(social ? "SOCIAL VIDEO BEHAVIOR REVIEW" : "LIVE CAMERA BEHAVIOR REVIEW");
+  r.push("");
+  if(url) r.push("Source note: "+url);
+  r.push("Important: This does not prove lying.");
+  r.push("");
+  r.push(`Confidence Signal: ${confidence}%`);
+  r.push(`Stress Signal: ${stress}%`);
+  r.push(`Engagement Signal: ${engagement}%`);
+  r.push(`Posture Stability: ${posture}%`);
+  r.push(`Statement Consistency: ${statementConsistency}%`);
+  r.push(`Combined Behavior Inconsistency Risk: ${combinedRisk}%`);
+  r.push("");
+  r.push("Read:");
+  r.push(combinedRisk>=70 ? "• High inconsistency/stress signal. Do not accuse; ask calm follow-up questions." :
+         combinedRisk>=45 ? "• Medium inconsistency signal. More context and comparison over time is needed." :
+         "• Low visible inconsistency signal in this sample.");
+  r.push("");
+  r.push("Transcript / wording flags:");
+  flags.forEach(f=>r.push("• "+f));
+  r.push("");
+  r.push("Recommended use:");
+  r.push("• Compare against the person's normal baseline.");
+  r.push("• Check facts, receipts, dates, and external evidence.");
+  r.push("• Never label someone a liar from video/body language alone.");
 
-  let report=[];
-  report.push("BEHAVIOR OBSERVATION REPORT");
-  report.push("");
-  report.push("Important: This is not proof of lying.");
-  report.push("");
-  report.push(`Confidence Signal: ${confidence}%`);
-  report.push(`Stress Signal: ${stress}%`);
-  report.push(`Engagement Signal: ${engagement}%`);
-  report.push(`Posture Stability: ${posture}%`);
-  report.push(`Behavior Inconsistency Risk: ${lieRisk}% — ${riskText}`);
-  report.push(`Truth Reliability Score: ${reliability}%`);
-  report.push("");
-  report.push("Read:");
-  report.push(confidence>=75 ? "• Subject appears visually composed/confident." : "• Confidence signal is mixed.");
-  report.push(stress>=60 ? "• Elevated stress/tension signal detected." : "• Stress/tension signal is low-to-moderate.");
-  report.push(lieRisk>=70 ? "• Inconsistency risk is elevated. Ask calm follow-up questions instead of accusing." :
-              lieRisk>=45 ? "• Some inconsistency signals. More context is needed." :
-              "• No strong visible inconsistency signal in this snapshot.");
-  report.push("");
-  report.push("Suggested follow-up:");
-  report.push("• Ask open-ended questions.");
-  report.push("• Compare answers over time.");
-  report.push("• Watch for sudden baseline changes.");
-  report.push("• Never accuse based only on body language.");
-
-  document.getElementById("report").innerText=report.join("\n");
+  reportText(r.join("\n"));
 }
 
-function setVal(id,value,classScore){
-  const el=document.getElementById(id);
-  el.textContent=value+"%";
-  el.className=scoreClass(classScore);
-}
+function autoAnalyze(){ if(timer) clearInterval(timer); analyze(); timer=setInterval(analyze,2000); }
 
-function autoAnalyze(){
-  if(timer) clearInterval(timer);
-  analyze();
-  timer=setInterval(analyze,2000);
+function downloadReport(){
+  const blob=new Blob([document.getElementById("report").innerText],{type:"text/plain"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="humanlens-social-video-report.txt";
+  a.click();
 }
 
 refreshCameras(false);
